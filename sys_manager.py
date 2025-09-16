@@ -1,19 +1,19 @@
 import psutil
-import win32api
 import os
-import wmi
 import time
 import subprocess
 import difflib
-import winreg
-import win32evtlog
+import winreg 
 import GPUtil
 from pySMART import Device
 from datetime import datetime, timedelta
 from bs4 import BeautifulSoup
 from sentence_transformers import SentenceTransformer, util
-# Note: This script is Windows-specific due to dependencies like win32api, wmi, winreg, and win32evtlog.
-# Requires additional installations: pip install psutil pywin32 GPUtil pySMART sentence-transformers beautifulsoup4
+import ctypes
+from ctypes import wintypes, byref, c_wchar_p
+import xml.etree.ElementTree as ET
+# Note: This script is Windows-specific.
+# Requires: pip install psutil GPUtil pySMART sentence-transformers beautifulsoup4
 
 class AISysManager:
     """
@@ -51,7 +51,7 @@ class AISysManager:
             intent: self.model.encode(examples, convert_to_tensor=True)
             for intent, examples in self.intents.items()
         }
-        # Detect drive types (SSD/HDD) - note: this is a crude check based on I/O times; for accuracy, use WMI queries.
+        # Detect drive types (SSD/HDD) - note: this is a crude check based on I/O times.
         self.drive_types = self.detect_drive_types()
         # Ensure reports directory exists for outputs like battery reports and benchmarks.
         if not os.path.exists("reports"):
@@ -79,7 +79,7 @@ class AISysManager:
     def execute_command(self, command):
         """
         Execute a shell command and return its stdout.
-        Uses subprocess for better security and deprecation avoidance (replaces os.popen).
+        Uses subprocess for better security and deprecation avoidance.
         """
         try:
             result = subprocess.run(command, shell=True, capture_output=True, text=True, timeout=30)
@@ -106,17 +106,19 @@ class AISysManager:
 
     def check_disk_space(self):
         """
-        Check free space on C: drive, including drive type and basic advice.
+        Check free space on C: drive using ctypes (no pywin32), including drive type and basic advice.
         Returns a formatted string with GB free and suggestions.
         """
         drive = "C:\\"
         try:
-            free_bytes = win32api.GetDiskFreeSpaceEx(drive)[0]
+            kernel32 = ctypes.windll.kernel32
+            free_bytes = wintypes.ULARGE_INTEGER()
+            kernel32.GetDiskFreeSpaceExW(c_wchar_p(drive), None, None, byref(free_bytes))
+            free_gb = free_bytes.QuadPart / (1024**3)
             drive_type = self.drive_types.get(drive.rstrip("\\"), "Unknown")  # Normalize to 'C:'
-            free_gb = free_bytes / (1024**3)
             advice = (
                 "Plenty of space left!" if free_gb > 10 else
-                "Running low—might want to clean up."
+                "Running low--might want to clean up."
             )
             if drive_type == "SSD":
                 advice += " No need to defrag this SSD."
@@ -134,7 +136,7 @@ class AISysManager:
         cpu_percent = psutil.cpu_percent(interval=1)
         advice = (
             "All good here." if cpu_percent < 70 else
-            "CPU's working hard—check Task Manager."
+            "CPU's working hard--check Task Manager."
         )
         return f"CPU usage: {cpu_percent}%. {advice}"
 
@@ -233,7 +235,7 @@ class AISysManager:
         percent = memory.percent
         advice = (
             "Memory looks fine." if percent < 80 else
-            "RAM's almost maxed out—close some apps."
+            "RAM's almost maxed out--close some apps."
         )
         processes = []
         for proc in psutil.process_iter(['name', 'memory_info']):
@@ -254,7 +256,7 @@ class AISysManager:
         Measure network bandwidth over 5 seconds and ping google.com.
         Returns a formatted string with results and advice.
         """
-        print("Running network test—this will take about 5 seconds...")
+        print("Running network test--this will take about 5 seconds...")
         net_io_start = psutil.net_io_counters()
         time.sleep(5)
         net_io_end = psutil.net_io_counters()
@@ -264,10 +266,10 @@ class AISysManager:
         try:
             ping_result = subprocess.run(["ping", "-n", "4", "google.com"], capture_output=True, text=True, timeout=20)
             ping_output = ping_result.stdout
-            ping_advice = "Internet looks good." if "time=" in ping_output else "Couldn't reach Google—check your connection."
+            ping_advice = "Internet looks good." if "time=" in ping_output else "Couldn't reach Google--check your connection."
         except Exception:
             ping_output = "Ping failed."
-            ping_advice = "Network issue detected—modem or router might be down."
+            ping_advice = "Network issue detected--modem or router might be down."
 
         return (
             f"Network Bandwidth (5s sample): Sent {sent_rate:.2f} MB/s, Received {recv_rate:.2f} MB/s\n"
@@ -276,28 +278,10 @@ class AISysManager:
 
     def check_system_temp(self):
         """
-        Check CPU temperature via OpenHardwareMonitor WMI namespace.
-        Requires OpenHardwareMonitor to be running.
-        Returns temperature and advice, or installation instructions.
+        CPU temperature check removed (requires pywin32/WMI or external tools).
+        Returns instructions for manual setup.
         """
-        try:
-            w = wmi.WMI(namespace="root\\OpenHardwareMonitor")
-            sensors = w.Sensor()
-            cpu_temp = None
-            for sensor in sensors:
-                if sensor.SensorType == "Temperature" and "CPU" in sensor.Name:
-                    cpu_temp = sensor.Value
-                    break
-            if cpu_temp is not None:
-                advice = (
-                    "Temp looks normal." if cpu_temp < 80 else
-                    "CPU's hot—check cooling or reduce load."
-                )
-                return f"CPU Temperature: {cpu_temp}°C. {advice}"
-            else:
-                return "No CPU temp found. Download OpenHardwareMonitor from openhardwaremonitor.org, run it, then try again."
-        except Exception as e:
-            return f"Temperature check failed: {str(e)}. Ensure OpenHardwareMonitor is installed and running (get it from openhardwaremonitor.org)."
+        return "CPU temperature not directly available without external tools. Download OpenHardwareMonitor from openhardwaremonitor.org, run it, and use a WMI-enabled script if needed."
 
     def check_startup(self):
         """
@@ -327,7 +311,7 @@ class AISysManager:
         return (
             "Startup Programs:\n" +
             "\n".join(startup_items) +
-            "\n\nThese run automatically at boot. Too many can slow startup—check Task Manager's Startup tab to disable."
+            "\n\nThese run automatically at boot. Too many can slow startup--check Task Manager's Startup tab to disable."
         )
 
     def check_battery(self):
@@ -337,8 +321,8 @@ class AISysManager:
         Returns health percentage and advice.
         """
         report_path = os.path.join("reports", "battery_report.html")
-        cmd = f'powercfg /batteryreport /output "{report_path}"'
-        result = subprocess.run(cmd, shell=True, capture_output=True, text=True)
+        cmd = ['powercfg', '/batteryreport', f'/output "{report_path}"']
+        result = subprocess.run(cmd, capture_output=True, text=True)
         if result.returncode != 0:
             return f"Battery report generation failed: {result.stderr.strip()}. Are you on a laptop with a battery?"
 
@@ -370,7 +354,7 @@ class AISysManager:
                 health_percent = (full_charge_capacity / design_capacity) * 100
                 advice = (
                     "Battery's in good shape." if health_percent > 80 else
-                    "Battery health is degrading—consider replacing it soon."
+                    "Battery health is degrading--consider replacing it soon."
                 )
                 return (
                     f"Battery Health:\n"
@@ -386,9 +370,10 @@ class AISysManager:
 
     def check_logs(self):
         """
-        Search and analyze Windows event logs for errors/warnings.
+        Search and analyze Windows event logs using wevtutil (no pywin32).
         Prompts user for filters (days, levels, keyword, error code).
         Returns a summary of recent events with friendly descriptions.
+        Fixed levels: 1=Critical, 2=Error, 3=Warning.
         """
         print("Let's refine your event log search...")
 
@@ -398,8 +383,8 @@ class AISysManager:
         except ValueError:
             days = 7
 
-        level_input = input("Filter by level (1=Critical, 2=Error, 4=Warning, e.g., '1,2', default all)? ").strip()
-        level_map = {"1": 1, "2": 2, "4": 4}
+        level_input = input("Filter by level (1=Critical, 2=Error, 3=Warning, e.g., '1,2', default all)? ").strip()
+        level_map = {"1": 1, "2": 2, "3": 3}
         levels = set()
         if level_input:
             for part in level_input.split(','):
@@ -407,43 +392,80 @@ class AISysManager:
                 if part in level_map:
                     levels.add(level_map[part])
         if not levels:
-            levels = {1, 2, 4}  # Default to Critical, Error, Warning
+            levels = {1, 2, 3}  # Default to Critical, Error, Warning
 
         keyword = input("Enter a keyword to search (e.g., 'dll', optional): ").strip().lower()
         error_code = input("Enter an error code (e.g., '0x80070491', optional): ").strip().lower()
 
-        print(f"Searching logs from last {days} days—this may take a moment...")
+        print(f"Searching logs from last {days} days--this may take a moment...")
         cutoff = datetime.now() - timedelta(days=days)
+        cutoff_str = cutoff.strftime('%Y-%m-%dT%H:%M:%S') + '.000Z'
+        levels_str = ' or '.join([f'Level={lvl}' for lvl in levels])
+        query = f"*[System[({levels_str}) and TimeCreated[@SystemTime > '{cutoff_str}']]]"
         logs = {"Application": [], "System": []}
 
-        for log_type in logs.keys():
+        for log_type in logs:
+            cmd = [
+                "wevtutil", "qe", log_type,
+                "/q", query,
+                "/f:xml",
+                "/c:500"  # Limit to recent 500 to avoid overload
+            ]
             try:
-                hand = win32evtlog.OpenEventLog(None, log_type)
-                flags = win32evtlog.EVENTLOG_BACKWARDS_READ | win32evtlog.EVENTLOG_SEQUENTIAL_READ
-                events = win32evtlog.ReadEventLog(hand, flags, 0)
+                result = subprocess.run(cmd, capture_output=True, text=True, check=True)
+                root = ET.fromstring(result.stdout)
+                for event in root.findall('.//Event'):
+                    system = event.find('System')
+                    if system is None:
+                        continue
+                    level_elem = system.find('Level')
+                    if level_elem is None:
+                        continue
+                    level_num = int(level_elem.text)
+                    if level_num not in levels:
+                        continue
 
-                while events:
-                    for event in events:
-                        event_time = event.TimeGenerated
-                        if event_time < cutoff:
-                            break
-                        level_num = event.EventType
-                        if level_num not in levels:
-                            continue
+                    time_elem = system.find('TimeCreated')
+                    if time_elem is None:
+                        continue
+                    time_str = time_elem.get('SystemTime')
+                    try:
+                        event_time = datetime.fromisoformat(time_str.replace('Z', '+00:00'))
+                    except ValueError:
+                        continue
+                    if event_time < cutoff:
+                        continue
 
-                        level_str = {1: "Critical", 2: "Error", 4: "Warning"}.get(level_num, "Other")
-                        source = event.SourceName
-                        desc = str(event.StringInserts) if event.StringInserts else "No description."
-                        details = f"Event ID: {event.EventID & 0xFFFF} | Category: {event.EventCategory}"
+                    level_str = {1: "Critical", 2: "Error", 3: "Warning"}.get(level_num, "Other")
+                    provider = system.find('Provider')
+                    source = provider.get('Name', 'Unknown') if provider is not None else 'Unknown'
+                    event_id_elem = system.find('EventID')
+                    event_id = event_id_elem.text if event_id_elem is not None else 'Unknown'
+                    category_elem = system.find('Task')  # Use Task as category proxy
+                    category = category_elem.text if category_elem is not None else '0'
+                    details = f"Event ID: {event_id} | Category: {category}"
 
-                        text = (desc + " " + details).lower()
-                        if (not keyword or keyword in text or difflib.SequenceMatcher(None, keyword, text).ratio() > 0.625) and \
-                           (not error_code or error_code in text):
-                            friendly_desc = self._synthesize_log(source, desc, details)
-                            logs[log_type].append((event_time, level_str, source, friendly_desc, details))
+                    # Description from RenderingInfo or fallback
+                    render = event.find('RenderingInfo')
+                    desc_elem = None
+                    if render is not None:
+                        desc_elem = render.find('Message')
+                    desc = desc_elem.text if desc_elem is not None else "No description."
 
-                    events = win32evtlog.ReadEventLog(hand, flags, 0)
-                win32evtlog.CloseEventLog(hand)
+                    text = (desc + " " + details).lower()
+                    if keyword and not (keyword in text or difflib.SequenceMatcher(None, keyword, text).ratio() > 0.625):
+                        continue
+                    if error_code and error_code not in text:
+                        continue
+
+                    friendly_desc = self._synthesize_log(source, desc, details)
+                    logs[log_type].append((event_time, level_str, source, friendly_desc, details))
+            except subprocess.CalledProcessError as e:
+                print(f"Error running wevtutil for {log_type}: {e}")
+                continue
+            except ET.ParseError as e:
+                print(f"Error parsing XML for {log_type}: {e}")
+                continue
             except Exception as e:
                 print(f"Error reading {log_type} log: {str(e)}")
                 continue
@@ -468,9 +490,9 @@ class AISysManager:
             f"- Total Warnings: {warning_count}"
         ]
         if error_count > 5:
-            analysis.append("Several serious issues detected—check hardware or software problems.")
+            analysis.append("Several serious issues detected--check hardware or software problems.")
         elif warning_count > 10:
-            analysis.append("Lots of warnings—your system might be unstable; look into frequent issues.")
+            analysis.append("Lots of warnings--your system might be unstable; look into frequent issues.")
         else:
             analysis.append("Things look mostly stable.")
 
@@ -483,9 +505,9 @@ class AISysManager:
         """
         known_issues = {
             "Application Error": lambda d: f"An app ({d.split('Event ID')[0].strip() if 'Event ID' in d else 'unknown'}) crashed unexpectedly." if "crashed" not in d.lower() else d,
-            "Windows Update": lambda d: "Windows Update hit a snag—might need a restart or manual update.",
+            "Windows Update": lambda d: "Windows Update hit a snag--might need a restart or manual update.",
             "Service Control Manager": lambda d: "A background service failed to start properly.",
-            "DLL": lambda d: "A system file (DLL) didn't load right—could be a missing or corrupt file."
+            "DLL": lambda d: "A system file (DLL) didn't load right--could be a missing or corrupt file."
         }
 
         desc_lower = desc.lower()
@@ -546,7 +568,7 @@ class AISysManager:
             selected.nice(priority_map[priority_input])
             return f"Set {selected.info['name']} (PID: {selected.info['pid']}) to {priority_input} priority."
         except psutil.AccessDenied:
-            return "Access denied—run as admin to change priority."
+            return "Access denied--run as admin to change priority."
         except Exception as e:
             return f"Failed to set priority: {str(e)}"
 
@@ -565,12 +587,12 @@ class AISysManager:
                 gpu_info = [
                     f"GPU {gpu.id}: {gpu.name}",
                     f"- Usage: {gpu.load * 100:.1f}%",
-                    f"- Temperature: {gpu.temperature}°C",
+                    f"- Temperature: {gpu.temperature}C",
                     f"- Memory: {gpu.memoryUsed:.1f}/{gpu.memoryTotal:.1f} MB "
                     f"({gpu.memoryUtil * 100:.1f}% used)"
                 ]
                 if gpu.temperature > 85:
-                    gpu_info.append("Warning: GPU is running hot—check cooling!")
+                    gpu_info.append("Warning: GPU is running hot--check cooling!")
                 output.extend(gpu_info)
             return "\n".join(output)
         except Exception as e:
@@ -591,12 +613,15 @@ class AISysManager:
                     if disk.smart_enabled:
                         health = disk.assessment if hasattr(disk, 'assessment') and disk.assessment else "Unknown"
                         # Temperature attribute (ID 194)
-                        temp = disk.attributes.get(194, {}).get('raw', 'N/A') if 194 in disk.attributes else "N/A"
+                        temp_attr = disk.attributes.get(194)
+                        temp = temp_attr.raw if temp_attr is not None else "N/A"
+                        model = getattr(disk, 'model', 'Unknown')
+                        interface = getattr(disk, 'interface', 'Unknown')
                         output.append(
-                            f"Drive {drive_letter} ({getattr(disk, 'model', 'Unknown')}):\n"
+                            f"Drive {drive_letter} ({model}):\n"
                             f"- Health: {health}\n"
-                            f"- Temperature: {temp}°C\n"
-                            f"- Type: {getattr(disk, 'interface', 'Unknown')}"
+                            f"- Temperature: {temp}C\n"
+                            f"- Type: {interface}"
                         )
                     else:
                         output.append(f"Drive {drive_letter}: SMART not supported.")
@@ -611,7 +636,7 @@ class AISysManager:
         Run simple benchmarks for CPU, memory, and disk (write/read 100MB).
         Returns scores in kOps/s, MB/s.
         """
-        print("Running benchmark—this will take about 10 seconds...")
+        print("Running benchmark--this will take about 10 seconds...")
 
         # CPU benchmark: Simple multiplication loop
         start = time.time()
@@ -695,7 +720,7 @@ class AISysManager:
             "- 'system info': Get details about your PC.\n"
             "- 'check memory': See RAM usage and top users.\n"
             "- 'check network': Check bandwidth and ping Google.\n"
-            "- 'check temperature': Get CPU temp (needs OpenHardwareMonitor).\n"
+            "- 'check temperature': Get info on setup (temp requires external tool).\n"
             "- 'check startup': List programs that run at boot.\n"
             "- 'check battery': Check battery health (laptops only).\n"
             "- 'check logs': Analyze recent event log warnings and errors.\n"
