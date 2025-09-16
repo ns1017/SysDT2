@@ -30,15 +30,15 @@ class AISysManager:
         self.model = SentenceTransformer('all-MiniLM-L6-v2')
         self.intents = {
             "check_disk": ["check disk space", "how much space is left", "disk usage"],
-            "check_cpu": ["check cpu", "cpu usage", "how’s my processor"],
+            "check_cpu": ["check cpu", "cpu usage", "how's my processor"],
             "kill_process": ["kill process", "stop a program", "end task"],
-            "system_info": ["system info", "tell me about my pc", "what’s my setup"],
+            "system_info": ["system info", "tell me about my pc", "what's my setup"],
             "check_memory": ["check memory", "ram usage", "how much ram is free"],
             "check_network": ["check network", "internet status", "network usage"],
             "check_temp": ["check temperature", "cpu temp", "is my pc hot"],
             "help": ["help", "what can you do", "list commands"],
             "check_startup": ["check startup", "startup programs", "what runs at boot"],
-            "check_battery": ["check battery", "battery health", "how’s my battery"],
+            "check_battery": ["check battery", "battery health", "how's my battery"],
             "check_logs": ["check logs", "event logs", "system warnings"],
             "set_priority": ["set priority", "change process priority", "boost process"],
             "check_gpu": ["check gpu", "gpu usage", "graphics card status"],
@@ -121,7 +121,7 @@ class AISysManager:
             if drive_type == "SSD":
                 advice += " No need to defrag this SSD."
             elif drive_type == "HDD":
-                advice += " Consider defragmenting this HDD if it’s slow."
+                advice += " Consider defragmenting this HDD if it's slow."
             return f"Free space on {drive} ({drive_type}): {free_gb:.2f} GB. {advice}"
         except Exception as e:
             return f"Error checking disk space: {str(e)}"
@@ -134,7 +134,7 @@ class AISysManager:
         cpu_percent = psutil.cpu_percent(interval=1)
         advice = (
             "All good here." if cpu_percent < 70 else
-            "CPU’s working hard—check Task Manager."
+            "CPU's working hard—check Task Manager."
         )
         return f"CPU usage: {cpu_percent}%. {advice}"
 
@@ -233,7 +233,7 @@ class AISysManager:
         percent = memory.percent
         advice = (
             "Memory looks fine." if percent < 80 else
-            "RAM’s almost maxed out—close some apps."
+            "RAM's almost maxed out—close some apps."
         )
         processes = []
         for proc in psutil.process_iter(['name', 'memory_info']):
@@ -264,7 +264,7 @@ class AISysManager:
         try:
             ping_result = subprocess.run(["ping", "-n", "4", "google.com"], capture_output=True, text=True, timeout=20)
             ping_output = ping_result.stdout
-            ping_advice = "Internet looks good." if "time=" in ping_output else "Couldn’t reach Google—check your connection."
+            ping_advice = "Internet looks good." if "time=" in ping_output else "Couldn't reach Google—check your connection."
         except Exception:
             ping_output = "Ping failed."
             ping_advice = "Network issue detected—modem or router might be down."
@@ -291,7 +291,7 @@ class AISysManager:
             if cpu_temp is not None:
                 advice = (
                     "Temp looks normal." if cpu_temp < 80 else
-                    "CPU’s hot—check cooling or reduce load."
+                    "CPU's hot—check cooling or reduce load."
                 )
                 return f"CPU Temperature: {cpu_temp}°C. {advice}"
             else:
@@ -327,7 +327,7 @@ class AISysManager:
         return (
             "Startup Programs:\n" +
             "\n".join(startup_items) +
-            "\n\nThese run automatically at boot. Too many can slow startup—check Task Manager’s Startup tab to disable."
+            "\n\nThese run automatically at boot. Too many can slow startup—check Task Manager's Startup tab to disable."
         )
 
     def check_battery(self):
@@ -369,7 +369,7 @@ class AISysManager:
             if design_capacity and full_charge_capacity:
                 health_percent = (full_charge_capacity / design_capacity) * 100
                 advice = (
-                    "Battery’s in good shape." if health_percent > 80 else
+                    "Battery's in good shape." if health_percent > 80 else
                     "Battery health is degrading—consider replacing it soon."
                 )
                 return (
@@ -380,7 +380,7 @@ class AISysManager:
                     f"{advice}"
                 )
             else:
-                return "Couldn’t find battery capacity data in report. Check 'reports/battery_report.html' manually."
+                return "Couldn't find battery capacity data in report. Check 'reports/battery_report.html' manually."
         except Exception as e:
             return f"Error parsing battery report: {str(e)}"
 
@@ -390,7 +390,7 @@ class AISysManager:
         Prompts user for filters (days, levels, keyword, error code).
         Returns a summary of recent events with friendly descriptions.
         """
-        print("Let’s refine your event log search...")
+        print("Let's refine your event log search...")
 
         days_input = input("How many days back to search (1-30, default 7)? ").strip()
         try:
@@ -485,7 +485,7 @@ class AISysManager:
             "Application Error": lambda d: f"An app ({d.split('Event ID')[0].strip() if 'Event ID' in d else 'unknown'}) crashed unexpectedly." if "crashed" not in d.lower() else d,
             "Windows Update": lambda d: "Windows Update hit a snag—might need a restart or manual update.",
             "Service Control Manager": lambda d: "A background service failed to start properly.",
-            "DLL": lambda d: "A system file (DLL) didn’t load right—could be a missing or corrupt file."
+            "DLL": lambda d: "A system file (DLL) didn't load right—could be a missing or corrupt file."
         }
 
         desc_lower = desc.lower()
@@ -494,7 +494,7 @@ class AISysManager:
                 return fn(desc + " " + details)
 
         if "failed" in desc_lower:
-            return f"Something ({source}) didn’t work as expected."
+            return f"Something ({source}) didn't work as expected."
         elif "warning" in desc_lower:
             return f"System flagged a potential issue with {source}."
         return f"{desc} ({details})"
@@ -688,7 +688,7 @@ class AISysManager:
         Return a list of available commands and descriptions.
         """
         return (
-            "Here’s what I can do:\n"
+            "Here's what I can do:\n"
             "- 'check disk space': See free space on your C: drive.\n"
             "- 'check cpu': Check CPU usage.\n"
             "- 'kill process': Stop a running program.\n"
@@ -699,7 +699,7 @@ class AISysManager:
             "- 'check startup': List programs that run at boot.\n"
             "- 'check battery': Check battery health (laptops only).\n"
             "- 'check logs': Analyze recent event log warnings and errors.\n"
-            "- 'set priority': Adjust a process’s CPU priority.\n"
+            "- 'set priority': Adjust a process's CPU priority.\n"
             "- 'check gpu': Monitor GPU usage, temp, and memory.\n"
             "- 'check disk health': Check SMART data for disk health.\n"
             "- 'run benchmark': Test CPU, memory, and disk performance.\n"
