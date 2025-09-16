@@ -12,6 +12,8 @@ from sentence_transformers import SentenceTransformer, util
 import ctypes
 from ctypes import wintypes, byref, c_wchar_p
 import xml.etree.ElementTree as ET
+# Author: ns1017 on Github, Data Analyst GPT (for help with comments and structure) 
+# Date: 2025-09-16
 # Note: This script is Windows-specific.
 # Requires: pip install psutil GPUtil pySMART sentence-transformers beautifulsoup4
 
@@ -784,3 +786,4 @@ class AISysManager:
 if __name__ == "__main__":
     ai = AISysManager()
     ai.run()
+
